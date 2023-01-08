@@ -1,0 +1,127 @@
+NOT USED 
+Option 2 PostgresSQL Code: 
+The top 100 customers, bringing in the most revenue, were reviewed to incentivize with additional promotions. 
+
+------------ B. CREATE TABLES ------------ 
+----- CREATE DETAILED TABLE ----- 
+
+DROP TABLE IF EXISTS sales_detailed; 
+CREATE TABLE sales_detailed ( 
+  store_id INTEGER 
+  ,customer_id INTEGER 
+  ,first_name VARCHAR (50) 
+  ,last_name VARCHAR (50) 
+  ,email_address VARCHAR (100) 
+  ,sales_amount NUMERIC(16,2) 
+); 
+ 
+-- To view empty sales_detailed table 
+-- SELECT * FROM sales_detailed; 
+
+----- CREATE SUMMARY TABLE ----- 
+DROP TABLE IF EXISTS sales_summary; 
+CREATE TABLE sales_summary ( 
+  customer_id INTEGER 
+  ,customer_full_name VARCHAR (150) 
+  ,email_address VARCHAR (100) 
+  ,sales_amount NUMERIC (16,2) 
+); 
+ 
+-- To view empty sales_summary table	 
+-- SELECT * FROM sales_summary; 
+
+------------ C. EXTRACT DATA (and insert) ------------ 
+INSERT INTO sales_detailed ( 
+  store_id   
+  ,customer_id  
+  ,first_name  
+  ,last_name  
+  ,email_address  
+  ,sales_amount ) 
+SELECT  
+	store.store_id 
+	,customer.customer_id 
+	,customer.first_name 
+	,customer.last_name 
+	,customer.email 
+	,payment.amount 
+FROM payment AS payment  
+INNER JOIN customer AS customer  
+	ON customer.customer_id = payment.customer_id  
+INNER JOIN store AS store  
+	ON store.store_id = customer.store_id 
+ 
+-- To view contents of sales_detailed table 
+-- SELECT * FROM sales_detailed; 
+	 
+------------ D. CREATE THE FUNCTION ------------ 
+CREATE OR REPLACE FUNCTION summary_sales()  
+RETURNS TRIGGER    
+AS $$ 
+BEGIN  
+DELETE FROM sales_summary;  
+ 
+INSERT INTO sales_summary (  
+SELECT   
+	customer_id  
+	,CONCAT_WS(first_name, ' ', last_name) 
+	,email_address 
+	,SUM(sales_amount)   
+	 
+FROM sales_detailed  
+GROUP BY 1, 2 
+ORDER BY 3 desc 
+LIMIT 100 
+);  
+ 
+RETURN NEW;  
+END; $$ 
+LANGUAGE PLPGSQL; 
+
+-- To view contents of sales_summary table 
+-- SELECT * FROM sales_summary; 
+ 
+------------ E. CREATE THE TRIGGER ------------ 
+CREATE TRIGGER refresh_summary 
+AFTER INSERT ON sales_detailed 
+FOR EACH STATEMENT 
+EXECUTE PROCEDURE summary_sales(); 
+ 
+------------ F. CREATE THE PROCEDURE------------ 
+ 
+CREATE PROCEDURE sales_report_refresh() 
+LANGUAGE PLPGSQL 
+AS $$ 
+BEGIN 
+DELETE FROM sales_detailed; 
+ 
+INSERT INTO sales_detailed ( 
+store_id   
+,customer_id  
+,first_name  
+,last_name  
+,email_address 
+,sales_amount ) 
+SELECT  
+	store.store_id 
+	,customer.customer_id 
+	,customer.first_name 
+	,customer.last_name 
+,customer.email_address 
+	,payment.amount 
+FROM payment AS payment  
+INNER JOIN customer AS customer  
+	ON customer.customer_id = payment.customer_id  
+INNER JOIN store AS store  
+	ON store.store_id = customer.store_id; 
+ 
+END; 
+$$; 
+ 
+
+-- To call stored procedure 
+CALL sales_report_refresh(); 
+ 
+-- To view results 
+SELECT * FROM sales_detailed; 
+SELECT * FROM sales_summary; 
